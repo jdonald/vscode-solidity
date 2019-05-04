@@ -233,6 +233,7 @@ connection.onInitialize((result): InitializeResult => {
                 triggerCharacters: [ '.' ],
             },
            definitionProvider: true,
+           codeActionProvider: true,
            textDocumentSync: documents.syncKind,
         },
     };

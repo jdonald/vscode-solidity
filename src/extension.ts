@@ -6,6 +6,7 @@ import {compileActiveContract, initDiagnosticCollection} from './compileActive';
 import {codeGenerateNethereumCQSCsharp, codeGenerateNethereumCQSFSharp, codeGenerateNethereumCQSVbNet,
     codeGenerateNethereumCQSCSharpAll, codeGenerateNethereumCQSFSharpAll, codeGenerateNethereumCQSVbAll, autoCodeGenerateAfterCompilation} from './codegen';
 import {LanguageClient, LanguageClientOptions, ServerOptions, TransportKind, RevealOutputChannelOn, WorkspaceChange} from 'vscode-languageclient';
+import {SolidityCodeActionProvider} from './codeActionProvider';
 import {lintAndfixCurrentDocument} from './linter/soliumClientFixer';
 // tslint:disable-next-line:no-duplicate-imports
 import { workspace, WorkspaceFolder } from 'vscode';
@@ -57,6 +58,10 @@ export function activate(context: vscode.ExtensionContext) {
         lintAndfixCurrentDocument();
     }));
 
+    const codeActionProvider = new SolidityCodeActionProvider();
+    context.subscriptions.push(vscode.languages.registerCodeActionsProvider({ scheme: 'file', language: 'solidity' }, codeActionProvider));
+    context.subscriptions.push(vscode.commands.registerCommand('solidity.runCodeAction', codeActionProvider.runCodeAction, codeActionProvider));
+    context.subscriptions.push(vscode.commands.registerCommand('solidity.runAnotherCodeAction', codeActionProvider.runAnotherCodeAction, codeActionProvider));
 
     const serverModule = path.join(__dirname, 'server.js');
 
