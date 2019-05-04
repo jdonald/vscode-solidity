@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {ContractCollection} from './model/contractsCollection';
 import { initialiseProject } from './projectService';
+import * as child_process from 'child_process';
 
 export enum compilerType {
     localNode,
@@ -142,10 +143,72 @@ export class SolcCompiler {
             const contractsForCompilation = contracts.getContractsForCompilation();
             contractsForCompilation.settings = null;
             const outputString = this.compile(JSON.stringify(contractsForCompilation));
+            const k = Object.keys(contractsForCompilation.sources);
+            var addon = [];
+            if (k.length == 1) {
+                try {
+                    const a = k[0];
+                    var foo  = child_process.execSync('/usr/local/bin/solc --asm --gas ' + a).toString();;
+                    const lines = foo.split('\n');
+                    var started = false;
+                    var m = {}
+                    for (let line of lines) {
+                        if (started) {
+                            if (line.match(/\(/)) {
+                                const results = line.match(/^ *(.*)\(.*\):\s*(.*)$/);
+                                if (results && results.length == 3) {
+                                    const funcName = results[1];
+                                    const gasAmount = parseInt(results[2], 10);
+                                    m[funcName] = gasAmount;
+                                }
+                            }
+                        } else if (line == 'Gas estimation:') {
+                            started = true;
+                        }
+                    }
+                    if (started) {
+                        var funcLocations = {}
+                        const filecontent = fs.readFileSync(a, 'utf8');
+                        const filelines = filecontent.split('\n');
+                        var counter = 1;
+                        for (let mykey in filelines) {
+                            const line = filelines[mykey];
+                            if (line.match(/function /)) {
+                                for (let funcName of Object.keys(m)) {
+                                    const re = "function.*" + funcName;
+                                    if (line.match(re)) {
+                                        funcLocations[funcName] = counter;
+                                    }
+                                }
+                            }
+                            counter += 1;
+                        }
+                        for (let line of lines) {
+                            if (line.match(/function /)) {
+                                for (let funcName of Object.keys(m)) {
+                                    const re = ":.*:.*function " + funcName;
+                                    if (line.match(re)) {
+                                        const colon_split = line.split(':');
+                                        addon.push({
+                                            component: 'general',
+                                            formattedMessage: a + ':' + (funcLocations[funcName] || '50') + ':1:' + funcName + ' *Gas estimate*: ' + m[funcName],
+                                            message: funcName + ' gas estimate: ' + m[funcName],
+                                            severity: 'warning',
+                                            sourceLocation: { end: parseInt(colon_split[2], 10) + parseInt(colon_split[1], 10), start: parseInt(colon_split[1], 10), file: a },
+                                            type: 'Warning'
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch(e) {}
+            }
             const output = JSON.parse(outputString);
             if (output.errors) {
-                return output
-                    .errors
+                return (output
+                    .errors).concat(addon)
                     .map(error => errorToDiagnostic(error));
             }
         } else {
